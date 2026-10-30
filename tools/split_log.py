@@ -50,7 +50,9 @@ def main():
         if hdr[kind] is None or len(vals) != len(hdr[kind]):
             bad += 1
             continue
-        key = (kind, vals[0], vals[10] if kind == "D" else "")   # run_id (+ node)
+        cols = hdr[kind]
+        key = (kind, vals[cols.index("run_id")],
+               vals[cols.index("node")] if kind == "D" else "")   # run_id (+ node)
         if key in seen:
             continue
         seen.add(key)
