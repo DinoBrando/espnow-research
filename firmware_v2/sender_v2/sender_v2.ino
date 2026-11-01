@@ -127,7 +127,8 @@ static int8_t txpMaxQ = 80, txpReqQ = 80, txpActualQ = 80, txpMinQ = 80;
 static struct { uint16_t seq; uint8_t retries; uint8_t state; uint32_t lastTxUs; } ack[ACK_SLOTS];  // state 0 kosong, 1 tunggu, 2 antre
 static uint8_t retxFifo[64];
 static uint8_t retxHead, retxTail;
-static uint32_t ackConfirmed, ackGiveUp;
+static uint32_t ackConfirmed, ackGiveUp, ackUnresolved;
+static bool ackFinalized;
 
 // STATUS dari receiver
 static volatile bool stNew = false;
@@ -377,7 +378,8 @@ static void ackAdd(uint16_t seq, uint32_t nowUs) {
   ack[i].lastTxUs = nowUs;
 }
 
-static void ackEvaluate(const StatusEntry &e) {
+// allowRetx=false dipakai setelah run selesai: hanya mengonfirmasi/menyerah, tidak mengirim ulang
+static void ackEvaluate(const StatusEntry &e, bool allowRetx) {
   uint32_t nowUs = (uint32_t)esp_timer_get_time();
   for (int i = 0; i < ACK_SLOTS; i++) {
     if (ack[i].state != 1) continue;
@@ -395,7 +397,7 @@ static void ackEvaluate(const StatusEntry &e) {
     }
     if (!missing) continue;
     uint8_t nh = (uint8_t)((retxHead + 1) % sizeof(retxFifo));
-    if (ack[i].retries < P.ackRetries && nh != retxTail) {
+    if (allowRetx && ack[i].retries < P.ackRetries && nh != retxTail) {
       ack[i].state = 2;
       retxFifo[retxHead] = (uint8_t)i;
       retxHead = nh;
@@ -524,7 +526,19 @@ static void handleStatus() {
     else if (e.rssi > P.tpHiDbm) q = (int8_t)max((int)txpReqQ - stepQ, 8);
     if (q != txpReqQ) { txpReqQ = q; applyTxPower(q); }
   }
-  if (cMethod == M_ACK && st == S_RUNNING) ackEvaluate(e);
+  if (cMethod == M_ACK) {
+    if (st == S_RUNNING) ackEvaluate(e, true);
+    else if (!ackFinalized) ackEvaluate(e, false);   // STATUS masa tenggang: konfirmasi paket terakhir
+  }
+}
+
+// dipanggil sekali sebelum laporan pertama: yang belum jelas statusnya dicatat terpisah
+static void ackFinalize() {
+  if (ackFinalized) return;
+  ackFinalized = true;
+  for (int i = 0; i < ACK_SLOTS; i++) {
+    if (ack[i].state) { ackUnresolved++; ack[i].state = 0; }
+  }
 }
 
 // dipanggil di RUNNING, DRAIN, REPORTING
@@ -575,7 +589,8 @@ static void beginRun() {
   cwMs = P.boCw0Ms; boScheduled = false; boDelaySum = 0; boDelayN = 0; boLastOk = 0; boLastFail = 0;
   memset(ack, 0, sizeof(ack));
   retxHead = retxTail = 0;
-  ackConfirmed = ackGiveUp = 0;
+  ackConfirmed = ackGiveUp = ackUnresolved = 0;
+  ackFinalized = false;
   hopPending = false; lastHopId = 0; hops = 0; scans = 0; scanning = false;
   lastHeardRxMs = millis();
   eJ = qC = vS = tS = 0; inaSamples = 0;
@@ -603,7 +618,8 @@ static void beginRun() {
 static void endSending() {
   elapsedMs = (uint32_t)((esp_timer_get_time() - runT0Us) / 1000);
   if (pending.valid) { skipped++; pending.valid = false; }
-  for (int i = 0; i < ACK_SLOTS; i++) if (ack[i].state) { ackGiveUp++; ack[i].state = 0; }
+  // paket yang masih menunggu ACK tetap dinilai dari STATUS masa tenggang (tanpa kirim ulang)
+  for (int i = 0; i < ACK_SLOTS; i++) if (ack[i].state == 2) ack[i].state = 1;
   retxHead = retxTail = 0;
   boScheduled = false;
   drainUntilMs = millis() + 3000;
@@ -629,7 +645,10 @@ static void runStep() {
   if (cMethod == M_DINTERVAL) {
     if (pending.valid && nowUs >= nextSendUs) {
       sendNew();
-      nextSendUs = nowUs + (int64_t)curIntvMs * 1000;
+      // jadwal tetap (tidak ikut bergeser karena keterlambatan loop): saat interval = nominal,
+      // kiriman tepat sejajar dengan pembangkitan sampel, sama seperti baseline
+      nextSendUs += (int64_t)curIntvMs * 1000;
+      if (nextSendUs < nowUs - (int64_t)curIntvMs * 1000) nextSendUs = nowUs;
     }
   } else if (cMethod == M_DBACKOFF) {
     uint32_t ok, fail;
@@ -735,6 +754,7 @@ static void sendReport() {
   r.scans = scans;
   r.ackConfirmed = (uint16_t)ackConfirmed;
   r.ackGiveUp = (uint16_t)ackGiveUp;
+  r.ackUnresolved = (uint16_t)ackUnresolved;
   r.intvFinalMs = curIntvMs;
   r.intvMeanMs = windows ? (uint16_t)(intvSum / windows) : curIntvMs;
   r.cwFinalMs = cwMs;
@@ -762,10 +782,12 @@ static void finishToIdle(bool acked) {
 }
 
 static void reportStep() {
+  if (stNew) handleStatus();
   serviceChannel();
   if (reportAcked) { finishToIdle(true); return; }
   if (!reached(reportAtMs)) { delay(1); return; }
   if (reportTries >= 8) { finishToIdle(false); return; }
+  ackFinalize();
   sendReport();
   reportTries++;
   reportAtMs = millis() + 350UL + (uint32_t)random(0, 250);

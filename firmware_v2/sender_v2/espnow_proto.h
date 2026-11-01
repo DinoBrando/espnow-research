@@ -14,7 +14,7 @@
 
 #define PROTO_MAGIC         0xE6
 #define FW_VERSION_MAJOR    2
-#define FW_VERSION_MINOR    0
+#define FW_VERSION_MINOR    1
 #define FW_VERSION          ((FW_VERSION_MAJOR << 8) | FW_VERSION_MINOR)
 
 #define MAX_NODES           32      // ID node valid: 1..MAX_NODES
@@ -203,7 +203,7 @@ typedef struct __attribute__((packed)) {
   uint32_t energyMj;
   uint32_t iAvgUa;
   uint16_t vAvgMv;
-  uint16_t pad4;
+  uint16_t ackUnresolved; // ACK: paket yang statusnya belum diketahui saat laporan dibuat
 } ReportPkt;
 
 static_assert(sizeof(PktHdr) == 4, "PktHdr");

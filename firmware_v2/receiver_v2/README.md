@@ -49,7 +49,7 @@ Urutan: ulangan paling luar, lalu nodes, payload, interval, mode, method.
 | `tp_step` | 2 | 4 | langkah (dBm) |
 | `ack_retries` | 2 | 5 | maks kirim ulang per paket |
 | `hop_fail` | 10 | 6 | pindah jika gagal MAC ≥ nilai ini (%) |
-| `hop_rx` | 10 | 6 | atau jika paket diterima < nilai ini (% dari harapan) |
+| `hop_rx` | 10 | 6 | atau jika paket diterima < nilai ini (% dari harapan). Nilai > 100 (maks 250) memaksa pindah, hanya untuk uji |
 | `hop_win` | 3 | 6 | jumlah jendela 1 dtk berturut-turut |
 | `keepalive` | 3000 | 6 | sender mencari receiver jika tak terdengar selama ini (ms) |
 
@@ -96,7 +96,7 @@ Setiap `run` dan `batch` mencatat baris `#PARAMS,...` di log.
 | `txp_final_dbm`, `txp_mean_dbm`, `txp_min_dbm` | daya pancar |
 | `intv_final_ms`, `intv_mean_ms` | interval kirim (metode 2) |
 | `cw_final_ms`, `backoff_mean_ms` | CW akhir dan rata-rata jeda (metode 3) |
-| `ack_confirmed`, `ack_giveup` | paket terkonfirmasi / tidak terkonfirmasi (metode 5) |
+| `ack_confirmed`, `ack_giveup`, `ack_unresolved` | metode 5: paket terkonfirmasi diterima / dinyatakan hilang setelah batas kirim ulang / belum jelas statusnya saat laporan dibuat |
 | `channel_final`, `hops`, `scans` | kanal akhir sender, jumlah pindah kanal, jumlah langkah pencarian receiver |
 | `ina_ok`, `energy_mj`, `i_avg_ma`, `v_avg_v`, `ina_samples` | energi selama run (N01 dan N02) |
 

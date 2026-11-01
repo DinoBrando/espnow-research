@@ -202,7 +202,7 @@ static void printHeaders() {
        "goodput_bps,jitter_us,max_gap_ms,rssi_avg,rssi_min,probes,echoes,rtt_min_us,rtt_mean_us,rtt_std_us,"
        "rtt_max_us,age_mean_us,age_max_us,slips,rate_final_mbps,rate_mean_mbps,rate_changes,txp_final_dbm,"
        "txp_mean_dbm,txp_min_dbm,intv_final_ms,intv_mean_ms,cw_final_ms,backoff_mean_ms,ack_confirmed,"
-       "ack_giveup,channel_final,hops,scans,ina_ok,energy_mj,i_avg_ma,v_avg_v,ina_samples");
+       "ack_giveup,ack_unresolved,channel_final,hops,scans,ina_ok,energy_mj,i_avg_ma,v_avg_v,ina_samples");
   emit("#HS,tag,fw_rx,method,run_id,rep,mode,nodes,payload,interval_ms,duration_s,probe_every,jitter_ms,"
        "reports,generated,tx_new,rx_unique,rx_late,pdr_gen_pct,pdr_sent_pct,offered_bps,goodput_bps,"
        "jain_pdr,worst_node,worst_pdr_pct,jitter_us_mean,rtt_mean_us,mac_fail,rssi_avg,rx_hops,"
@@ -584,7 +584,7 @@ static void finishRun() {
     snprintf(b, sizeof(b),
              "D,%u.%u,%u.%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,%u,%s,%lu,%u,%lu,%u,%u,%u,%u,%u,%u,%lu,%lu,%lu,%lu,%lu,"
              "%.2f,%.2f,%.0f,%.1f,%.2f,%.1f,%d,%u,%u,%lu,%lu,%lu,%lu,%lu,%lu,%u,%.1f,%.1f,%u,%.2f,%.2f,%.2f,"
-             "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%.2f,%.3f,%u",
+             "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%.2f,%.3f,%u",
              FW_VERSION_MAJOR, FW_VERSION_MINOR,
              rep ? (unsigned)(r.fw >> 8) : 0u, rep ? (unsigned)(r.fw & 0xFF) : 0u,
              (unsigned)cfg.method, (unsigned)cfg.runId, (unsigned)cfg.rep, (unsigned)cfg.mode,
@@ -605,7 +605,7 @@ static void finishRun() {
              rateFinal, rep ? r.rateMeanX10 / 10.0f : 0.0f, rep ? r.rateChanges : 0,
              rep ? r.txpFinalQ / 4.0f : 0.0f, rep ? r.txpMeanQ / 4.0f : 0.0f, rep ? r.txpMinQ / 4.0f : 0.0f,
              rep ? r.intvFinalMs : 0, rep ? r.intvMeanMs : 0, rep ? r.cwFinalMs : 0, rep ? r.backoffMeanMs : 0,
-             rep ? r.ackConfirmed : 0, rep ? r.ackGiveUp : 0,
+             rep ? r.ackConfirmed : 0, rep ? r.ackGiveUp : 0, rep ? r.ackUnresolved : 0,
              rep ? r.channelFinal : 0, rep ? r.hops : 0, rep ? r.scans : 0,
              rep ? r.inaOk : 0, (unsigned long)(rep ? r.energyMj : 0), rep ? r.iAvgUa / 1000.0f : 0.0f,
              rep ? r.vAvgMv / 1000.0f : 0.0f, rep ? r.inaSamples : 0);
@@ -728,7 +728,7 @@ static bool setParam(const char *k, const char *v) {
   else if (!strcmp(k, "tp_step")) gParams.tpStepDbm = (uint8_t)constrain(x, 1, 10);
   else if (!strcmp(k, "ack_retries")) gParams.ackRetries = (uint8_t)constrain(x, 0, 5);
   else if (!strcmp(k, "hop_fail")) gParams.hopFailPct = (uint8_t)constrain(x, 1, 100);
-  else if (!strcmp(k, "hop_rx")) gParams.hopRxPct = (uint8_t)constrain(x, 0, 100);
+  else if (!strcmp(k, "hop_rx")) gParams.hopRxPct = (uint8_t)constrain(x, 0, 250);  // >100 = paksa pindah (uji)
   else if (!strcmp(k, "hop_win")) gParams.hopWindows = (uint8_t)constrain(x, 1, 30);
   else if (!strcmp(k, "keepalive")) gParams.keepaliveMs = (uint16_t)constrain(x, 500, 30000);
   else return false;
