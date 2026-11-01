@@ -4,11 +4,14 @@ Firmware untuk mengukur kinerja mentah ESP-NOW (tanpa mekanisme adaptif) dengan 
 
 ## Isi repo
 
+> **Firmware terbaru ada di [`firmware_v2/`](firmware_v2/)**: baseline dan 6 metode adaptif dalam satu firmware. Folder `baseline_receiver/` dan `baseline_sender/` adalah versi 1 yang dipakai untuk sesi uji coba 2026-10-30. Firmware v1 dan v2 tidak bisa dipakai bersamaan.
+
 | Folder | Isi |
 |---|---|
 | [`baseline_receiver/`](baseline_receiver/) | Firmware receiver ESP32-C6: pengontrol eksperimen sekaligus pencatat metrik |
 | [`baseline_sender/`](baseline_sender/) | Firmware pengirim, satu firmware yang sama untuk semua node |
-| [`tools/`](tools/) | `split_log.py`: mengubah log Serial receiver menjadi file CSV |
+| [`firmware_v2/`](firmware_v2/) | Firmware v2: receiver dan sender dengan 6 metode adaptif |
+| [`tools/`](tools/) | `serial_log.py`: serial monitor lewat Command Prompt yang menyimpan log ke file. `split_log.py`: mengubah log menjadi file CSV |
 | [`results/`](results/) | Tempat menyimpan log mentah dan CSV hasil tes |
 
 ## Cara kerja singkat
@@ -16,7 +19,7 @@ Firmware untuk mengukur kinerja mentah ESP-NOW (tanpa mekanisme adaptif) dengan 
 - Receiver terhubung ke laptop lewat USB. Semua sender memakai baterai.
 - Receiver menyiarkan perintah START berisi parameter run (jumlah node, ukuran payload, interval, durasi). Sender tidak perlu di-flash ulang untuk tiap skenario.
 - Run dengan `N` node berarti hanya sender ber-ID **1 sampai N** yang mengirim. Sender lain diam.
-- Data dikirim **unicast** ke receiver. Broadcast hanya dipakai untuk pesan kontrol (HELLO, START, STOP) di luar periode pengukuran.
+- Data dikirim **unicast** ke receiver. Broadcast dipakai untuk pesan kontrol (HELLO, START, STOP) dan untuk balasan dari receiver (echo RTT dan ACK laporan), karena ESP-NOW hanya mengizinkan 20 peer.
 - Receiver menghitung loss, goodput, jitter, dan RSSI. Sender menghitung status kirim MAC dan RTT, lalu mengirim laporannya ke receiver setelah run selesai.
 - Semua hasil keluar di Serial Monitor receiver sebagai baris CSV dan juga disimpan di flash receiver (LittleFS).
 

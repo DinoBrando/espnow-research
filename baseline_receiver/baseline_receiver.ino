@@ -95,7 +95,7 @@ static volatile uint16_t curRunId = 0;
 static volatile bool acceptData = false;
 static volatile bool acceptReports = false;
 static volatile uint32_t reportsGot = 0;
-static volatile uint32_t echoDrop = 0, echoFail = 0, peerEvict = 0;
+static volatile uint32_t echoDrop = 0, echoFail = 0;
 static volatile uint32_t lastSeenMs[MAX_NODES + 1];
 
 static NodeRun run_[MAX_NODES + 1];
@@ -122,7 +122,6 @@ static File logFile;
 
 // ===== utilitas =====
 static inline bool reached(uint32_t t) { return (int32_t)(millis() - t) >= 0; }
-static inline bool isBcast(const uint8_t *m) { return memcmp(m, BCAST, 6) == 0; }
 
 static void openLog() {
 #if USE_LITTLEFS
@@ -154,49 +153,30 @@ static void printHeaders() {
   closeLog();
 }
 
-// Batas ESP-NOW: total peer 20. Dengan 20 sender + broadcast = 21, jadi peer dikelola dinamis.
-static bool ensurePeer(const uint8_t *mac) {
-  if (esp_now_is_peer_exist(mac)) return true;
-  esp_now_peer_info_t p = {};
-  memcpy(p.peer_addr, mac, 6);
-  p.channel = 0;
-  p.ifidx = WIFI_IF_STA;
-  p.encrypt = false;
-  esp_err_t e = esp_now_add_peer(&p);
-  if (e == ESP_ERR_ESPNOW_FULL) {
-    esp_now_peer_info_t old;
-    bool fromHead = true;
-    while (esp_now_fetch_peer(fromHead, &old) == ESP_OK) {
-      fromHead = false;
-      if (!isBcast(old.peer_addr)) {
-        esp_now_del_peer(old.peer_addr);
-        peerEvict++;
-        break;
-      }
-    }
-    e = esp_now_add_peer(&p);
-  }
-  return e == ESP_OK;
-}
-
+// Echo dan ACK laporan dikirim lewat BROADCAST, bukan unicast per node.
+// Alasannya: ESP-NOW hanya mengizinkan 20 peer, sedangkan 20 sender + broadcast = 21.
+// Tiap paket membawa nodeId, dan sender mengabaikan echo/ACK yang bukan miliknya,
+// jadi receiver cukup punya satu peer (broadcast) untuk membalas semua node.
+// Konsekuensi: broadcast tidak di-ACK/retry di tingkat MAC, jadi echo bisa hilang
+// saat kanal padat (terlihat dari echoes < probes). Laporan yang ACK-nya hilang
+// dikirim ulang oleh sender (maks 8 kali), jadi tetap sampai.
 static void echoTask(void *arg) {
   (void)arg;
   EchoJob j;
   for (;;) {
     if (xQueueReceive(echoQ, &j, portMAX_DELAY) != pdTRUE) continue;
-    if (!ensurePeer(j.mac)) { echoFail++; continue; }
     if (j.kind == 0) {
       EchoPkt e;
       e.h = makeHdr(PKT_ECHO, j.nodeId, 0);
       e.runId = j.runId;
       e.seq = j.seq;
       e.tsUs = j.tsUs;
-      if (esp_now_send(j.mac, (const uint8_t *)&e, sizeof(e)) != ESP_OK) echoFail++;
+      if (esp_now_send(BCAST, (const uint8_t *)&e, sizeof(e)) != ESP_OK) echoFail++;
     } else {
       StopPkt a;
       a.h = makeHdr(PKT_REPORT_ACK, j.nodeId, 0);
       a.runId = j.runId;
-      if (esp_now_send(j.mac, (const uint8_t *)&a, sizeof(a)) != ESP_OK) echoFail++;
+      if (esp_now_send(BCAST, (const uint8_t *)&a, sizeof(a)) != ESP_OK) echoFail++;
     }
   }
 }
@@ -446,9 +426,9 @@ static void finishRun() {
   emit(b);
   closeLog();
 
-  Serial.printf("# selesai run %u: laporan %lu/%u, echo_drop=%lu echo_fail=%lu peer_evict=%lu\n",
+  Serial.printf("# selesai run %u: laporan %lu/%u, echo_drop=%lu echo_fail=%lu\n",
                 (unsigned)cfg.runId, (unsigned long)nRep, (unsigned)cfg.nodes,
-                (unsigned long)echoDrop, (unsigned long)echoFail, (unsigned long)peerEvict);
+                (unsigned long)echoDrop, (unsigned long)echoFail);
 
   state = ST_IDLE;
   nextRunAt = millis() + GAP_BETWEEN_RUNS_MS;

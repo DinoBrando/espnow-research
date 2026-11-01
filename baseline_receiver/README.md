@@ -176,7 +176,8 @@ Hubungan yang berguna untuk analisis: biasanya `lost_gap ≈ tx_api_err + mac_fa
 
 ## Catatan teknis
 
-- **Batas peer ESP-NOW.** ESP-NOW hanya mengizinkan 20 peer, sedangkan receiver perlu 20 sender ditambah alamat broadcast. Receiver menambah peer saat perlu mengirim echo atau ACK, dan menghapus peer lama jika penuh. Jumlah penghapusan tercatat sebagai `peer_evict` di baris komentar akhir run.
+- **Echo dan ACK laporan dikirim lewat broadcast.** ESP-NOW hanya mengizinkan 20 peer, sedangkan 20 sender ditambah alamat broadcast berjumlah 21. Karena itu receiver hanya memakai satu peer (broadcast) untuk semua balasan. Tiap balasan membawa ID node, dan sender mengabaikan balasan yang bukan miliknya. Menerima data dari sender tidak membutuhkan peer sama sekali.
+- **Akibat broadcast:** echo tidak di-ACK atau di-retry di tingkat MAC, jadi saat kanal padat sebagian echo bisa hilang (`echoes < probes`). RTT dihitung dari echo yang kembali. ACK laporan yang hilang tidak masalah karena sender mengirim ulang laporannya (maks 8 kali).
 - **RTT** diukur di sender: waktu kirim probe sampai echo diterima, termasuk waktu proses di receiver. Echo dikirim dari task terpisah supaya callback penerimaan tetap singkat.
 - **Callback penerimaan tidak memakai Serial.** Semua penghitungan selesai di callback, pencetakan dilakukan setelah run. Jadi baud Serial tidak memengaruhi metrik.
 - `echo_drop` dan `echo_fail` di baris komentar akhir run menunjukkan echo atau ACK yang gagal dikirim receiver. Nilai besar berarti RTT dan laporan bisa kurang lengkap.
